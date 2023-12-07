@@ -28,7 +28,7 @@ class KVClient:
         data = r.SerializeToString()
         data = pack('!cI', b'\0', len(data)) + data
 
-        resp = requests.post(HOST + "/kv.KV/Get", data=data, headers=HEADERS)
+        resp = requests.post(HOST + "/kv.KV/Get", data=data, headers=HEADERS | {'key': key})
 
         return kv.GetResponse().FromString(resp.content[5:])
 
@@ -37,7 +37,11 @@ class KVClient:
         data = r.SerializeToString()
         data = pack('!cI', b'\0', len(data)) + data
 
-        return requests.post(HOST + "/kv.KV/Set", data=data, headers=HEADERS)
+        return requests.post(
+            HOST + "/kv.KV/Set", data=data, headers=HEADERS | {
+                'key': key,
+                'val': value
+            })
 
 
 def main():
