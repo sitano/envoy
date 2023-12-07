@@ -16,8 +16,6 @@ static_resources:
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.access_loggers.stream.v3.StdoutAccessLog
           stat_prefix: egress_http
-          common_http_protocol_options:
-            idle_timeout: 0.840s
           use_remote_address: true
           route_config:
             name: local_route
@@ -27,21 +25,30 @@ static_resources:
               - grpc
               routes:
               - match:
-                  prefix: "/"
+                  prefix: "/kv.KV"
                 route:
                   cluster: backend-proxy
           http_filters:
-          - name: envoy.filters.http.grpc_http1_bridge
+          - name: envoy.filters.http.ext_proc.blah
             typed_config:
-              "@type": type.googleapis.com/envoy.extensions.filters.http.grpc_http1_bridge.v3.Config
+              "@type": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor
+              failure_mode_allow: false
+              async_mode: false
+              allow_mode_override: true
+              message_timeout: 360s
+              grpc_service:
+                envoy_grpc:
+                  cluster_name: ext-proc-proxy
+                timeout: 60s
+                initial_metadata:
+                  - key: "x-blah-blah-header"
+                    value: "blahblahblah"
           - name: envoy.filters.http.router
             typed_config:
               "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
   clusters:
   - name: backend-proxy
-    type: LOGICAL_DNS
-    dns_lookup_family: V4_ONLY
-    lb_policy: ROUND_ROBIN
+    type: STATIC
     typed_extension_protocol_options:
       envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
         "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
@@ -56,3 +63,15 @@ static_resources:
               socket_address:
                 address: 127.0.0.1
                 port_value: 8811
+  - name: ext-proc-proxy
+    type: STATIC
+    http2_protocol_options: {}
+    load_assignment:
+      cluster_name: ext-proc-proxy
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 127.0.0.1
+                port_value: 8082

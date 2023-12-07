@@ -1,3 +1,4 @@
+// $ bazel-bin/source/exe/envoy-static --config-path ./envoy-proxy.yaml --log-level debug --base-id 1
 package main
 
 import (
@@ -11,6 +12,7 @@ import (
 	"github.com/envoyproxy/envoy/examples/grpc-bridge/server/kv"
 	"golang.org/x/net/context"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type KV struct {
@@ -19,7 +21,12 @@ type KV struct {
 }
 
 func (k *KV) Get(ctx context.Context, in *kv.GetRequest) (*kv.GetResponse, error) {
-	log.Printf("get: %s", in.Key)
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		log.Printf("get metadata: %+v, get: %s", md, in.Key)
+	} else {
+		log.Printf("get: %s", in.Key)
+	}
+
 	resp := new(kv.GetResponse)
 	if val, ok := k.store[in.Key]; ok {
 		resp.Value = val
@@ -29,7 +36,12 @@ func (k *KV) Get(ctx context.Context, in *kv.GetRequest) (*kv.GetResponse, error
 }
 
 func (k *KV) Set(ctx context.Context, in *kv.SetRequest) (*kv.SetResponse, error) {
-	log.Printf("set: %s = %s", in.Key, in.Value)
+	if md, ok := metadata.FromIncomingContext(ctx); ok {
+		log.Printf("set metadata: %+v, set: %s = %s", md, in.Key, in.Value)
+	} else {
+		log.Printf("set: %s = %s", in.Key, in.Value)
+	}
+
 	k.Lock()
 	defer k.Unlock()
 
