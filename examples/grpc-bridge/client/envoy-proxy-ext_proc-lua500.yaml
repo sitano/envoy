@@ -1,0 +1,101 @@
+static_resources:
+  listeners:
+    - name: internal
+      address:
+        socket_address:
+          address: 0.0.0.0
+          port_value: 8000
+      filter_chains:
+        - filters:
+          - name: envoy.filters.network.http_connection_manager
+            typed_config:
+              "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+              stat_prefix: internal_http
+              route_config:
+                name: internal_route
+                virtual_hosts:
+                  - name: internal_service
+                    domains: [ "*" ]
+                    routes:
+                      - match:
+                          headers:
+                            - name: ":method"
+                              string_match:
+                                exact: "POST"
+                          path_separated_prefix: "/healthz"
+                        direct_response:
+                          status: 200
+                          body:
+                            inline_string: "OK"
+              http_filters:
+                - name: envoy.filters.http.lua
+                  typed_config:
+                    "@type": type.googleapis.com/envoy.extensions.filters.http.lua.v3.Lua
+                    default_source_code:
+                      inline_string: |
+                        -- Called on the request path.
+                        function envoy_on_request(request_handle)
+                          request_handle:logInfo("lua_on_request")
+                          local headers = request_handle:headers()
+                          local pass = headers:get("pass")
+                          if (pass ~= nil) then
+                            return
+                          end 
+                          request_handle:logInfo("pass, send 500")
+                          -- Response directly and set a header from the HTTP call. No further filter iteration occurs.
+                          request_handle:respond(
+                          {[":status"] = "500",
+                            ["upstream_foo"] = headers["foo"]},
+                          "lua_denied")
+                        end
+                - name: envoy.filters.http.ext_proc
+                  typed_config:
+                    "@type": type.googleapis.com/envoy.extensions.filters.http.ext_proc.v3.ExternalProcessor
+                    failure_mode_allow: false
+                    async_mode: false
+                    allow_mode_override: true
+                    message_timeout: 10s
+                    processing_mode:
+                      request_header_mode: "SEND"
+                      response_header_mode: "SKIP"
+                      request_body_mode: "NONE"
+                      response_body_mode: "NONE"
+                      request_trailer_mode: "SKIP"
+                      response_trailer_mode: "SKIP"
+                    grpc_service:
+                      envoy_grpc:
+                        cluster_name: ext-proc-proxy
+                      timeout: 30s
+                - name: envoy.filters.http.router
+                  typed_config:
+                    "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
+                    suppress_envoy_headers: true
+  clusters:
+  - name: backend-proxy
+    type: STATIC
+    typed_extension_protocol_options:
+      envoy.extensions.upstreams.http.v3.HttpProtocolOptions:
+        "@type": type.googleapis.com/envoy.extensions.upstreams.http.v3.HttpProtocolOptions
+        explicit_http_config:
+          http_protocol_options: {}
+    load_assignment:
+      cluster_name: backend-proxy
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 127.0.0.1
+                port_value: 8811
+  - name: ext-proc-proxy
+    type: STATIC
+    http2_protocol_options: {}
+    load_assignment:
+      cluster_name: backend-proxy
+      endpoints:
+      - lb_endpoints:
+        - endpoint:
+            address:
+              socket_address:
+                address: 127.0.0.1
+                port_value: 8082
