@@ -9,6 +9,7 @@ from kv import kv_pb2 as kv
 from struct import pack
 
 HOST = os.getenv('CLIENT_PROXY', "http://localhost:9001")
+AUTH = os.getenv('AUTH', "pass")
 HEADERS = {'content-type': 'application/grpc', 'Host': 'grpc'}
 USAGE = """
 grpc-client usage [{host}]:
@@ -28,7 +29,7 @@ class KVClient:
         data = r.SerializeToString()
         data = pack('!cI', b'\0', len(data)) + data
 
-        resp = requests.post(HOST + "/kv.KV/Get", data=data, headers=HEADERS | {'key': key})
+        resp = requests.post(HOST + "/kv.KV/Get", data=data, headers=HEADERS | {'key': key, 'auth': AUTH})
 
         return kv.GetResponse().FromString(resp.content[5:])
 
@@ -40,7 +41,8 @@ class KVClient:
         return requests.post(
             HOST + "/kv.KV/Set", data=data, headers=HEADERS | {
                 'key': key,
-                'val': value
+                'val': value,
+                'auth': AUTH
             })
 
 

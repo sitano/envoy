@@ -29,8 +29,6 @@ var (
 	hs       *health.Server
 )
 
-const ()
-
 type server struct{}
 
 type healthServer struct{}
